@@ -101,24 +101,24 @@ resource "aws_subnet" "private_database" {
 }
 
 
-# resource "aws_eip" "nat" {
-#   domain = "vpc"
+resource "aws_eip" "nat" {
+  domain = "vpc"
 
-#   tags = {
-#     Name = "nat-gateway-eip"
-#   }
-# }
+  tags = {
+    Name = "nat-gateway-eip"
+  }
+}
 
-# resource "aws_nat_gateway" "nat_gw" {
-#   allocation_id = aws_eip.nat.id
+resource "aws_nat_gateway" "nat_gw" {
+  allocation_id = aws_eip.nat.id
 
-#   subnet_id = aws_subnet.public[
-#     local.availability_zones[0]
-#   ].id
+  subnet_id = aws_subnet.public[
+    local.availability_zones[0]
+  ].id
 
-#   tags = {
-#     Name = "nat-gateway-${local.availability_zones[0]}"
-#   }
+  tags = {
+    Name = "nat-gateway-${local.availability_zones[0]}"
+  }
 
-#   depends_on = [aws_internet_gateway.igw]
-# }
+  depends_on = [aws_internet_gateway.igw]
+}

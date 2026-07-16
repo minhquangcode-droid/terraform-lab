@@ -1,52 +1,40 @@
-# Tài liệu giải thích Terraform Application
+# Tài liệu Terraform Application
 
-Tài liệu này mô tả **đúng trạng thái code hiện tại** trong thư mục `Application`. Mục tiêu là giúp người đọc hiểu Terraform bắt đầu từ đâu, mỗi module tạo tài nguyên gì, các tài nguyên liên kết với nhau như thế nào và phần nào vẫn chưa được triển khai.
+Tài liệu này mô tả trạng thái code hiện tại trong thư mục `Application`: kiến trúc, luồng dependency, chức năng từng module, cách triển khai và các điểm cần cải thiện.
 
-## 1. Tổng quan
-
-Project hướng tới kiến trúc web nhiều tầng trên AWS:
+## 1. Kiến trúc hiện tại
 
 ```text
 Internet
    |
-Route 53 + ACM
+   | HTTP :80
+   v
+Application Load Balancer
    |
-Application Load Balancer trong public subnets
+   | Target Group :80
+   v
+EC2 Auto Scaling Group
    |
-EC2 Auto Scaling Group trong private application subnets
+   | Nginx trong private application subnets
    |
-RDS MySQL trong private database subnets
+   +--> NAT Gateway --> Internet
+
+Administrator
+   |
+   | SSH :22
+   v
+Bastion EC2 trong public subnet
 ```
 
-Hiện tại code mới triển khai phần nền tảng:
+VPC được chia thành ba tầng subnet trên tối đa ba Availability Zone:
 
-```text
-Đã có
-├── VPC
-├── Internet Gateway
-├── Public subnets
-├── Private application subnets
-├── Private database subnets
-├── Route tables và associations
-├── Public route tới Internet Gateway
-├── Module Security Group dùng chung
-└── Một Bastion Security Group được gọi từ prod
+- public subnet: ALB, Bastion và NAT Gateway;
+- private application subnet: EC2 của Auto Scaling Group;
+- private database subnet: dành cho RDS và không có route ra Internet.
 
-Chưa có
-├── NAT Gateway đang bị comment
-├── Bastion EC2 instance
-├── Application Load Balancer
-├── ACM và Route 53
-├── Launch Template
-├── Auto Scaling Group
-├── Application EC2 instances
-├── RDS DB subnet group
-└── RDS MySQL
-```
+RDS, ACM và Route 53 chưa được triển khai trong code.
 
-Hình kiến trúc mục tiêu nằm tại [`Architecture.png`](./Architecture.png).
-
-## 2. Cấu trúc thư mục
+## 2. Cấu trúc project
 
 ```text
 Application/
@@ -57,199 +45,135 @@ Application/
 │   └── prod/
 │       ├── backend.tf
 │       ├── provider.tf
-│       ├── main.tf
-│       ├── variables.tf
-│       ├── outputs.tf
 │       ├── data.tf
+│       ├── main.tf
+│       ├── index.html
+│       ├── outputs.tf
+│       ├── variables.tf
 │       └── .terraform.lock.hcl
 └── modules/
     ├── vpc/
-    │   ├── main.tf
-    │   ├── routes.tf
-    │   ├── variables.tf
-    │   └── outputs.tf
-    └── security/
-        ├── main.tf
-        ├── variables.tf
-        └── outputs.tf
+    ├── security/
+    ├── ec2/
+    ├── alb/
+    └── asg/
 ```
 
-`live/prod` là **root module**. Đây là thư mục chạy các lệnh `terraform init`, `terraform plan`, `terraform apply` và `terraform destroy`.
+`live/prod` là root module. Chạy các lệnh Terraform từ thư mục này.
 
-`modules/vpc` và `modules/security` là các **child module**. Chúng không tự chạy; root module gọi chúng bằng block `module`.
+Các thư mục trong `modules` là child module và chỉ tạo tài nguyên khi được root module gọi.
 
-## 3. Luồng dependency giữa các module
+## 3. Luồng dependency
 
 ```text
-AWS provider (us-east-1)
-          |
-          v
-     module.vpc
-          |
-          | output: vpc_id
-          v
-  module.bastion_sg
+AWS provider
+     |
+     v
+VPC module
+     |
+     +--> public subnet IDs ----------> Bastion EC2
+     |                              |
+     |                              +--> Bastion SG
+     |
+     +--> public subnet IDs ----------> ALB
+     |                              |
+     |                              +--> ALB SG
+     |
+     +--> private subnet IDs ---------> ASG
+                                    |
+ALB Target Group ARN ---------------+
+                                    |
+Application SG <--- ALB SG/Bastion SG
 ```
 
-Terraform tự suy ra thứ tự tạo:
-
-1. Cấu hình AWS provider.
-2. Tạo VPC và các tài nguyên network.
-3. Lấy `module.vpc.vpc_id`.
-4. Tạo Bastion Security Group trong VPC đó.
-
-Không cần viết `depends_on` giữa hai module vì biểu thức `vpc_id = module.vpc.vpc_id` đã tạo dependency tự nhiên.
+Terraform tự suy ra thứ tự nhờ việc truyền output của module này vào input của module khác. Không cần thêm `depends_on` cho các dependency đã thể hiện qua biểu thức tham chiếu.
 
 ## 4. Root module `live/prod`
 
-### 4.1 `backend.tf`
+### 4.1 Backend
 
-```hcl
-terraform {
-  backend "s3" {
-    bucket = "lab-terraform-state-vmq"
-    key    = "prod/app.tfstate"
-    region = "us-east-1"
-  }
-}
-```
-
-Backend quyết định nơi lưu Terraform state:
+State được lưu tại:
 
 ```text
 s3://lab-terraform-state-vmq/prod/app.tfstate
 ```
 
-Bucket backend phải tồn tại trước khi chạy `terraform init`. Region trong backend chỉ dùng để truy cập bucket state; nó không cấu hình region cho AWS resources.
+Bucket phải tồn tại trước khi chạy `terraform init`.
 
-### 4.2 `provider.tf`
+Backend hiện chưa khai báo `use_lockfile = true`. Nên bật S3 state locking để tránh hai tiến trình cùng sửa state.
 
-File này:
+### 4.2 Provider
 
-- yêu cầu AWS provider phiên bản tương thích với `6.54`;
-- cấu hình region mặc định là `us-east-1`.
+- AWS provider: `hashicorp/aws ~> 6.54`;
+- region: `us-east-1`;
+- child module tự kế thừa default provider từ root module.
 
-```hcl
-provider "aws" {
-  region = "us-east-1"
-}
-```
+`.terraform.lock.hcl` phải được commit để các môi trường sử dụng cùng provider version và checksum.
 
-Các child module tự kế thừa default AWS provider này. Vì vậy module VPC không cần nhận biến `region`.
+### 4.3 AMI
 
-### 4.3 `.terraform.lock.hcl`
-
-Lock file đang khóa AWS provider ở phiên bản `6.54.0` cùng các checksum. File này nên được commit để local và CI sử dụng cùng provider build.
-
-Không chỉnh sửa lock file bằng tay. Terraform cập nhật file khi chạy `terraform init` hoặc `terraform init -upgrade`.
-
-### 4.4 `main.tf`
-
-Root module hiện gọi hai module.
-
-#### VPC module
+`data.aws_ami.ubuntu` tìm AMI Ubuntu 26.04 x86_64 mới nhất từ tài khoản Canonical chính thức:
 
 ```hcl
-module "vpc" {
-  source = "../../modules/vpc"
-
-  vpc_cidr = "10.0.0.0/16"
-  tag      = "Create by terraform"
-  az_count = 3
-}
+owners = ["099720109477"]
 ```
 
-Ý nghĩa:
+AMI được dùng cho Bastion và Launch Template. Vì `most_recent = true`, một AMI mới có thể khiến EC2 hoặc Launch Template thay đổi ở lần plan sau.
 
-- tạo VPC CIDR `10.0.0.0/16`;
-- lấy tối đa ba Availability Zone;
-- tạo một public, một private application và một private database subnet trong mỗi AZ.
+### 4.4 Các module được gọi
 
-#### Bastion Security Group module
-
-Root module gọi module `security` để tạo một SG tên `bastion-sg`.
-
-Map `rules` hiện chứa:
-
-- một ingress TCP/22;
-- một egress cho phép mọi protocol tới mọi IPv4 destination.
-
-Lưu ý quan trọng: ingress SSH hiện dùng `0.0.0.0/0`, nghĩa là mở port 22 cho toàn Internet. Key `ssh_from_bastion` cũng không khớp với ý nghĩa rule vì đây là traffic đi **vào Bastion**. Cấu hình an toàn hơn là đổi thành `ssh_from_admin` và dùng IP public của quản trị viên theo dạng `/32`.
-
-Ví dụ mong muốn:
-
-```hcl
-ssh_from_admin = {
-  description = "Allow SSH from administrator IP"
-  direction   = "ingress"
-  ip_protocol = "tcp"
-  from_port   = 22
-  to_port     = 22
-  cidr_ipv4   = "203.0.113.10/32"
-}
-```
-
-Security Group không tạo Bastion EC2. Nó chỉ là firewall để gắn vào Bastion EC2 được tạo sau này.
-
-### 4.5 `variables.tf` và `data.tf`
-
-Hai file này hiện đang rỗng.
-
-Khi bỏ hardcode IP admin, nên khai báo `admin_cidr` trong `variables.tf` và truyền giá trị qua `terraform.tfvars` hoặc command line.
-
-### 4.6 `outputs.tf`
-
-Root module expose lại các output của VPC:
-
-| Output | Nội dung |
+| Module | Chức năng |
 |---|---|
-| `vpc_id` | ID của VPC |
-| `public_subnet_ids` | Danh sách public subnet ID |
-| `private_subnet_ids` | Danh sách private application subnet ID |
-| `private_database_subnet_ids` | Danh sách private database subnet ID |
-| `internet_gateway_id` | ID của Internet Gateway |
-| `availability_zones` | Danh sách AZ đã chọn |
+| `vpc` | VPC, subnet, IGW, NAT và route tables |
+| `bastion_sg` | Firewall cho Bastion |
+| `bastion_ec2` | Bastion host trong public subnet đầu tiên |
+| `alb_sg` | Nhận HTTP từ Internet |
+| `application_sg` | Nhận HTTP từ ALB và SSH từ Bastion |
+| `alb` | ALB, Target Group và HTTP listener |
+| `application_asg` | Launch Template, ASG và CPU scaling policy |
 
-Output chỉ hiển thị hoặc truyền dữ liệu; nó không tạo thêm AWS resource.
+### 4.5 Security Group flow
+
+```text
+Internet 0.0.0.0/0 --TCP/80--> ALB SG
+ALB SG               --TCP/80--> Application SG
+Bastion SG           --TCP/22--> Application SG
+Internet 0.0.0.0/0 --TCP/22--> Bastion SG
+```
+
+Rule SSH vào Bastion hiện mở `0.0.0.0/0`. Đây là cấu hình rủi ro và nên đổi thành IP admin dạng `x.x.x.x/32`.
+
+### 4.6 Key pair
+
+- Bastion EC2 dùng key pair `terraform-lab`;
+- Launch Template của application hiện không nhận `key_name`, nên giá trị là `null`;
+- vì vậy, dù Application SG cho phép SSH từ Bastion, application EC2 chưa thể SSH bằng key pair theo cách thông thường.
+
+Có thể truyền:
+
+```hcl
+key_name = "terraform-lab"
+```
+
+vào module `application_asg`, hoặc bỏ SSH và quản trị instance bằng AWS Systems Manager.
+
+### 4.7 Root outputs
+
+Root module hiện output:
+
+- VPC ID;
+- public, private application và private database subnet IDs;
+- Internet Gateway ID;
+- Availability Zones;
+- Bastion instance ID và public IP.
+
+Nên bổ sung `module.alb.dns_name` để truy cập application thuận tiện sau khi apply.
 
 ## 5. VPC module
 
-### 5.1 Inputs
+### 5.1 Availability Zones
 
-`modules/vpc/variables.tf` có ba biến:
-
-| Biến | Kiểu | Default | Ý nghĩa |
-|---|---|---:|---|
-| `vpc_cidr` | `string` | `10.0.0.0/16` | CIDR chính của VPC |
-| `az_count` | `number` | `3` | Số AZ tối đa được sử dụng |
-| `tag` | `string` | `Create by terraform` | Nội dung tag mô tả |
-
-Hiện `az_count` chưa có validation. Do code chia CIDR theo các dải `0`, `10` và `20`, nên nên giới hạn `az_count` trong khoảng `1..10` để các nhóm subnet không chồng lấn.
-
-### 5.2 VPC và Internet Gateway
-
-`aws_vpc.this` tạo VPC với DNS support và DNS hostnames được bật.
-
-`aws_internet_gateway.igw` gắn Internet Gateway vào VPC. Chỉ tạo IGW chưa làm subnet trở thành public; subnet còn cần route `0.0.0.0/0 -> IGW`.
-
-### 5.3 Lấy Availability Zones
-
-Data source:
-
-```hcl
-data "aws_availability_zones" "available" {
-  state = "available"
-
-  filter {
-    name   = "opt-in-status"
-    values = ["opt-in-not-required", "opted-in"]
-  }
-}
-```
-
-lấy các AZ khả dụng trong region của provider, hiện là `us-east-1`.
-
-Local value xử lý danh sách:
+Data source lấy các AZ khả dụng trong region hiện tại. Local value sắp xếp và lấy tối đa `az_count` AZ:
 
 ```hcl
 availability_zones = slice(
@@ -259,29 +183,17 @@ availability_zones = slice(
 )
 ```
 
-Luồng xử lý:
+Với `az_count = 3`, kết quả thường là:
 
-1. Lấy tất cả tên AZ khả dụng.
-2. `sort()` sắp xếp tên để thứ tự ổn định.
-3. `length()` đếm số AZ thật sự có.
-4. `min()` tránh lấy quá số AZ hiện có.
-5. `slice()` lấy từ phần tử đầu tiên đến tối đa `az_count`.
-
-Ví dụ với `az_count = 3`:
-
-```hcl
-[
-  "us-east-1a",
-  "us-east-1b",
-  "us-east-1c"
-]
+```text
+us-east-1a
+us-east-1b
+us-east-1c
 ```
 
-Nếu region chỉ trả về hai AZ thì module chỉ tạo tài nguyên trong hai AZ, không báo lỗi vì yêu cầu ba AZ.
+### 5.2 Subnet và CIDR
 
-### 5.4 Cách `for_each` tạo subnet
-
-Mỗi loại subnet dùng:
+Mỗi loại subnet dùng map AZ sang index:
 
 ```hcl
 for_each = {
@@ -289,171 +201,69 @@ for_each = {
 }
 ```
 
-Danh sách AZ được chuyển thành map:
+Với VPC `10.0.0.0/16`, module tạo:
 
-```hcl
-{
-  "us-east-1a" = 0
-  "us-east-1b" = 1
-  "us-east-1c" = 2
-}
-```
-
-Trong mỗi resource instance:
-
-- `each.key` là tên AZ;
-- `each.value` là index bắt đầu từ `0`.
-
-Địa chỉ Terraform có dạng:
-
-```text
-aws_subnet.public["us-east-1a"]
-aws_subnet.private["us-east-1a"]
-aws_subnet.private_database["us-east-1a"]
-```
-
-Dùng AZ làm key ổn định và dễ hiểu hơn dùng `count` với index thuần túy.
-
-### 5.5 Quy hoạch CIDR
-
-Code sử dụng `cidrsubnet(var.vpc_cidr, 8, netnum)`. Với VPC `/16`, thêm tám bit tạo subnet `/24`.
-
-Khi `az_count = 3`, CIDR dự kiến là:
-
-| Tầng | AZ index 0 | AZ index 1 | AZ index 2 |
+| Tầng | AZ-A | AZ-B | AZ-C |
 |---|---|---|---|
 | Public | `10.0.0.0/24` | `10.0.1.0/24` | `10.0.2.0/24` |
-| Private application | `10.0.10.0/24` | `10.0.11.0/24` | `10.0.12.0/24` |
-| Private database | `10.0.20.0/24` | `10.0.21.0/24` | `10.0.22.0/24` |
+| Application | `10.0.10.0/24` | `10.0.11.0/24` | `10.0.12.0/24` |
+| Database | `10.0.20.0/24` | `10.0.21.0/24` | `10.0.22.0/24` |
 
-Public subnet bật:
+Nên thêm validation `1 <= az_count <= 10`; nếu lớn hơn 10, các offset CIDR có thể trùng nhau.
 
-```hcl
-map_public_ip_on_launch = true
-```
-
-nên EC2 mới được launch trong đó có thể tự nhận public IPv4. Private application và database subnet đặt giá trị này thành `false`.
-
-`map_public_ip_on_launch` không tự tạo Internet connectivity. Route table vẫn quyết định đường đi của traffic.
-
-### 5.6 Routing hiện tại
-
-#### Public routing
+### 5.3 Public routing
 
 ```text
 Public subnet
    |
 Public route table
    |
-0.0.0.0/0 -> Internet Gateway
-   |
-Internet
+0.0.0.0/0 --> Internet Gateway
 ```
 
-Một public route table được dùng chung cho tất cả public subnet. `aws_route_table_association.public` lặp qua map `aws_subnet.public` và gắn từng subnet vào route table này.
+Tất cả public subnet dùng chung một public route table.
 
-#### Private application routing
+### 5.4 Private application routing và NAT
 
-Tất cả private application subnet dùng chung `aws_route_table.private`.
-
-NAT Gateway và route `0.0.0.0/0 -> NAT Gateway` đang bị comment. Vì vậy trạng thái hiện tại là:
+NAT Gateway hiện đã được bật:
 
 ```text
 Private application subnet
    |
-Private route table
+Shared private route table
    |
-Chỉ có route local trong VPC
+0.0.0.0/0
+   |
+NAT Gateway trong public subnet đầu tiên
+   |
+Elastic IP + Internet Gateway
+   |
+Internet
 ```
 
-EC2 trong các subnet này hiện không có đường ra Internet. Chúng vẫn có thể giao tiếp với tài nguyên trong VPC nếu Security Group cho phép.
+Một NAT duy nhất giúp giảm chi phí lab nhưng có các hạn chế:
 
-#### Private database routing
+- là single point of failure cho outbound traffic;
+- traffic từ AZ khác có thể phát sinh cross-AZ charge;
+- production yêu cầu độ sẵn sàng cao thường dùng một NAT mỗi AZ và route table riêng theo AZ.
 
-Database subnets dùng chung một route table khác và chỉ có route local mặc định. Đây là thiết kế cô lập phù hợp cho RDS:
+NAT cho phép connection đi ra từ private subnet; nó không cho Internet chủ động kết nối vào private EC2.
+
+### 5.5 Database routing
+
+Private database subnets dùng route table riêng và không có default route tới NAT hoặc IGW:
 
 ```text
-Private database subnet
-   |
-Private database route table
-   |
-Không có IGW hoặc NAT route
+Database subnet --> local VPC route only
 ```
 
-### 5.7 NAT Gateway đang bị tắt
-
-Các resource `aws_eip.nat`, `aws_nat_gateway.nat_gw` và route private Internet đều đang được comment.
-
-Nếu bật lại một NAT Gateway duy nhất:
-
-- NAT nằm trong public subnet đầu tiên;
-- tất cả private application subnet đi qua NAT đó;
-- chi phí thấp hơn mô hình một NAT mỗi AZ;
-- nhưng NAT trở thành single point of failure cho outbound traffic;
-- traffic từ AZ khác có thể đi xuyên AZ.
-
-Database route table không nên được route tới NAT nếu RDS không có nhu cầu đặc biệt.
-
-### 5.8 Outputs của VPC
-
-VPC module output các ID cần cho module phía sau:
-
-```text
-vpc_id
-public_subnet_ids
-private_subnet_ids
-private_database_subnet_ids
-internet_gateway_id
-availability_zones
-subnet_ids
-```
-
-`subnet_ids` ghép theo thứ tự:
-
-1. toàn bộ public subnet;
-2. toàn bộ private application subnet;
-3. toàn bộ private database subnet.
-
-Khi module khác cần đúng một loại subnet, nên dùng output riêng thay vì `subnet_ids` tổng hợp.
+Đây là cấu hình phù hợp để đặt RDS với `publicly_accessible = false`.
 
 ## 6. Security module
 
-Module `modules/security` là module generic: mỗi lần gọi tạo **một Security Group** và số rule tùy ý.
+Module Security Group nhận một map `rules` chứa cả ingress và egress.
 
-### 6.1 Inputs
-
-| Biến | Ý nghĩa |
-|---|---|
-| `name` | Tên Security Group |
-| `vpc_id` | VPC chứa Security Group |
-| `description` | Mô tả SG, có default |
-| `rules` | Map chứa cả ingress và egress rule |
-| `tags` | Map tag bổ sung |
-
-Mỗi rule có dạng tổng quát:
-
-```hcl
-rule_name = {
-  description                  = optional(string)
-  direction                    = "ingress" hoặc "egress"
-  ip_protocol                  = "tcp", "udp", "icmp" hoặc "-1"
-  from_port                    = optional(number)
-  to_port                      = optional(number)
-  cidr_ipv4                    = optional(string)
-  cidr_ipv6                    = optional(string)
-  prefix_list_id               = optional(string)
-  referenced_security_group_id = optional(string)
-}
-```
-
-Validation yêu cầu:
-
-1. `direction` chỉ được là `ingress` hoặc `egress`;
-2. mỗi rule phải có đúng một source/destination trong bốn loại CIDR IPv4, CIDR IPv6, prefix list hoặc Security Group reference.
-
-### 6.2 Tách ingress và egress
-
-Module nhận một map `rules`, sau đó tạo hai map local:
+Hai local map lọc rule theo direction:
 
 ```hcl
 ingress_rules = {
@@ -467,105 +277,205 @@ egress_rules = {
 }
 ```
 
-Đây là map comprehension có điều kiện:
+Mỗi rule phải:
 
-- lặp qua từng `name` và `rule`;
-- giữ nguyên cặp `name => rule`;
-- chỉ giữ rule có direction phù hợp.
+- có direction là `ingress` hoặc `egress`;
+- khai báo đúng một source/destination: IPv4 CIDR, IPv6 CIDR, prefix list hoặc Security Group ID.
 
-### 6.3 Tạo rule bằng `for_each`
+`ip_protocol = "-1"` kết hợp `0.0.0.0/0` ở egress nghĩa là cho phép mọi protocol đi tới mọi IPv4 destination. Route table vẫn quyết định traffic có đường tới destination hay không.
 
-Ingress map được dùng bởi:
+## 7. EC2 module
 
-```hcl
-aws_vpc_security_group_ingress_rule.this
-```
+Module tạo một `aws_instance`, hiện dùng cho Bastion:
 
-Egress map được dùng bởi:
+- AMI và instance type nhận từ root;
+- gắn subnet và danh sách Security Group;
+- có thể gắn public IP;
+- yêu cầu IMDSv2;
+- root EBS mặc định là gp3, 8 GiB, encrypted;
+- gắn tag `Name`.
 
-```hcl
-aws_vpc_security_group_egress_rule.this
-```
+Biến `ebs_volume_size` hiện không được sử dụng vì volume đã được cấu hình qua object `root_volume`; nên xóa biến dư này.
 
-Ví dụ key `ssh_from_admin` tạo địa chỉ Terraform:
+`user_data` đang mặc định là chuỗi rỗng. Provider có thể cảnh báo chuỗi rỗng giống dữ liệu base64; nên đổi default thành `null`.
+
+## 8. ALB module
+
+Module tạo ba resource:
+
+1. Application Load Balancer trong public subnets;
+2. Target Group port 80, target type `instance`;
+3. HTTP listener port 80 forward tới Target Group.
+
+Health check mặc định:
 
 ```text
-aws_vpc_security_group_ingress_rule.this["ssh_from_admin"]
+protocol: HTTP
+path: /
+port: traffic-port
+matcher: 200-399
+interval: 30 seconds
 ```
 
-Rule:
+ALB SG nhận HTTP từ Internet. Application SG chỉ nhận port 80 từ ALB SG, vì vậy Internet không thể truy cập trực tiếp application EC2.
+
+Hiện chưa có HTTPS listener, ACM certificate hoặc HTTP-to-HTTPS redirect.
+
+## 9. Launch Template và Auto Scaling Group
+
+### 9.1 Launch Template
+
+Launch Template cấu hình:
+
+- Ubuntu AMI;
+- `t3.micro`;
+- Application Security Group;
+- IMDSv2 bắt buộc;
+- gp3 encrypted root volume;
+- instance và volume tags;
+- user-data được base64 encode trước khi gửi cho EC2.
+
+`update_default_version = true` tạo default version mới khi nội dung Launch Template thay đổi.
+
+### 9.2 Auto Scaling Group
+
+ASG hiện dùng:
+
+```text
+min_size         = 2
+desired_capacity = 2
+max_size         = 4
+```
+
+Instance được phân bổ trong private application subnets và đăng ký vào ALB Target Group. Vì Target Group được truyền vào module, health check type là `ELB`.
+
+### 9.3 CPU scaling
+
+CPU target tracking đang bật mặc định:
+
+```text
+Target average CPU = 60%
+```
+
+Nếu không muốn tự động scale theo CPU:
 
 ```hcl
-allow_all_egress = {
-  direction   = "egress"
-  ip_protocol = "-1"
-  cidr_ipv4   = "0.0.0.0/0"
+enable_cpu_scaling = false
+```
+
+Khi giữ scaling policy, nên cân nhắc lifecycle `ignore_changes = [desired_capacity]` để Terraform không đưa capacity về giá trị khai báo sau khi AWS đã scale.
+
+### 9.4 Instance refresh
+
+Module sử dụng rolling instance refresh:
+
+```hcl
+instance_refresh {
+  strategy = "Rolling"
+
+  preferences {
+    min_healthy_percentage = 50
+    instance_warmup        = 300
+    skip_matching          = true
+  }
 }
 ```
 
-nghĩa là cho phép mọi IP protocol đi tới mọi địa chỉ IPv4. Rule firewall không tự tạo route; resource vẫn cần IGW hoặc NAT nếu muốn đi Internet.
+Khi Launch Template version thay đổi, ASG lần lượt thay EC2 cũ bằng EC2 mới thay vì xóa tất cả cùng lúc.
 
-Security Group là stateful: response traffic của một request đã được cho phép sẽ tự động được phép quay lại.
+## 10. Nginx và `index.html`
 
-### 6.4 Outputs
+User-data thực hiện:
 
-Module output:
+1. cập nhật apt package metadata;
+2. cài Nginx;
+3. giải mã và giải nén `index.html`;
+4. ghi file vào `/var/www/html/index.html`;
+5. kiểm tra cấu hình và khởi động Nginx.
 
-```text
-security_group_id
-security_group_arn
+`index.html` lớn hơn giới hạn user-data 16 KiB nên không được nhúng nguyên văn. Root module sử dụng:
+
+```hcl
+base64gzip(file("${path.module}/index.html"))
 ```
 
-Các module ALB, EC2 hoặc RDS sau này sẽ nhận `security_group_id` để gắn SG vào tài nguyên tương ứng.
+EC2 giải nén bằng:
 
-## 7. Trạng thái so với architecture mục tiêu
+```bash
+base64 --decode | gzip --decompress
+```
 
-| Thành phần | Trạng thái | Ghi chú |
-|---|---|---|
-| S3 backend | Có | Bucket phải tạo trước |
-| AWS provider | Có | Region `us-east-1` |
-| VPC | Có | `10.0.0.0/16` |
-| 3 tầng subnet | Có | Public, application, database |
-| Internet Gateway | Có | Public route đã trỏ tới IGW |
-| Public route table | Có | Dùng chung cho public subnets |
-| Private application route table | Có | Chưa có outbound Internet |
-| Database route table | Có | Đang cô lập |
-| NAT Gateway | Tắt | Code đang bị comment |
-| Generic Security module | Có | Có thể tái sử dụng |
-| Bastion SG | Có | SSH đang mở toàn Internet |
-| Bastion EC2 | Chưa có | SG không phải EC2 instance |
-| ALB SG | Chưa có | Sẽ mở 80/443 từ Internet |
-| Application SG | Chưa có | Sẽ nhận traffic từ ALB/Bastion SG |
-| RDS SG | Chưa có | Sẽ chỉ nhận 3306 từ Application SG |
-| ALB | Chưa có | Cần target group và listeners |
-| Launch Template/ASG | Chưa có | Đặt trong private application subnets |
-| RDS subnet group | Chưa có | Dùng private database subnet IDs |
-| RDS Multi-AZ | Chưa có | Đặt `publicly_accessible = false` |
-| ACM/Route 53 | Chưa có | Thực hiện sau ALB |
+Trang HTML hiện có favicon SVG nhúng trực tiếp, giao diện responsive, sơ đồ kiến trúc, đồng hồ, request ID, theme switcher và các tương tác JavaScript mà không phụ thuộc CDN.
 
-## 8. Những điểm nên sửa trước khi tiếp tục
+Khi `index.html` thay đổi:
 
-### Ưu tiên cao
+```text
+index.html changes
+   |
+compressed user_data changes
+   |
+new Launch Template version
+   |
+ASG rolling instance refresh
+   |
+new EC2 runs user-data and serves the new page
+```
 
-1. Không mở SSH `0.0.0.0/0`. Dùng IP admin `/32` hoặc cân nhắc AWS Systems Manager Session Manager.
-2. Đổi key `ssh_from_bastion` của Bastion SG thành `ssh_from_admin` để đúng ý nghĩa.
-3. Quyết định private application instances có cần outbound Internet hay không. Nếu cần, bật NAT hoặc thêm các VPC endpoint phù hợp.
+User-data chỉ chạy trong lần boot đầu tiên, nên việc thay instance là cần thiết với thiết kế hiện tại.
 
-### Nên cải thiện
+## 11. Trạng thái triển khai trong code
 
-1. Thêm validation `az_count >= 1 && az_count <= 10` để tránh CIDR overlap.
-2. Nếu chỉ muốn standard AZ, thêm filter `zone-type = availability-zone` vào data source.
-3. Thêm descriptions cho variables và outputs của VPC module.
-4. Thống nhất tag `Name`, `Environment` và `ManagedBy` thay vì chỉ dùng tag `description`.
-5. Đưa region, VPC CIDR, AZ count và admin CIDR thành root variables thay vì hardcode.
-6. Chạy `terraform fmt -recursive` để chuẩn hóa khoảng trắng và newline trong các file hiện tại.
+| Thành phần | Trạng thái |
+|---|---|
+| S3 backend | Có |
+| VPC và ba tầng subnet | Có |
+| Internet Gateway | Có |
+| Public route | Có |
+| NAT Gateway và private application route | Có, một NAT |
+| Isolated database route table | Có |
+| Generic Security Group module | Có |
+| Bastion EC2 | Có |
+| ALB và Target Group | Có |
+| Launch Template và ASG | Có |
+| CPU target tracking | Có, mặc định bật |
+| Nginx user-data | Có |
+| RDS Security Group | Chưa có |
+| RDS subnet group và database | Chưa có |
+| ACM và HTTPS listener | Chưa có |
+| Route 53 record | Chưa có |
+| Monitoring/alarms | Chưa có |
 
-## 9. Quy trình chạy Terraform
+## 12. Các điểm cần cải thiện
 
-Chạy từ root module:
+Ưu tiên:
+
+1. Thay Bastion SSH `0.0.0.0/0` bằng admin CIDR `/32`.
+2. Chọn key pair cho application EC2 hoặc chuyển sang Systems Manager.
+3. Bổ sung output ALB DNS.
+4. Bật state locking cho S3 backend.
+
+Code quality:
+
+1. Thêm validation cho `az_count`, ASG sizes và port values.
+2. Xóa biến `ebs_volume_size` không được sử dụng.
+3. Đổi EC2 `user_data` mặc định từ `""` sang `null`.
+4. Đưa region, CIDR, admin CIDR và environment thành root variables.
+5. Thống nhất tags `Name`, `Environment` và `ManagedBy`.
+
+Các bước kiến trúc tiếp theo:
+
+1. RDS Security Group chỉ nhận TCP/3306 từ Application SG.
+2. RDS subnet group dùng private database subnet IDs.
+3. RDS Multi-AZ với `publicly_accessible = false`.
+4. ACM certificate và HTTPS listener.
+5. Route 53 alias trỏ tới ALB.
+6. CloudWatch logs, metrics và alarms.
+
+## 13. Quy trình chạy Terraform
 
 ```bash
 cd Application/live/prod
+
 terraform fmt -recursive ../..
 terraform init
 terraform validate
@@ -573,52 +483,19 @@ terraform plan
 terraform apply
 ```
 
-Trước khi apply:
-
-- AWS credentials phải hợp lệ;
-- bucket S3 backend phải tồn tại;
-- kiểm tra kỹ plan, đặc biệt là CIDR, routes và Security Group rules.
-
-Xem outputs:
+Sau apply:
 
 ```bash
 terraform output
-terraform output public_subnet_ids
+terraform state list
 ```
 
-Destroy:
+Hủy môi trường:
 
 ```bash
 terraform destroy
 ```
 
-NAT Gateway, Load Balancer và RDS có thể mất vài phút để xóa. Không chạy nhiều lệnh Terraform đồng thời trên cùng state. Nếu lệnh bị dừng bất thường, kiểm tra state lock trước khi dùng `force-unlock`; chỉ force-unlock khi chắc chắn không còn tiến trình apply/destroy khác.
+Không chạy nhiều lệnh apply/destroy đồng thời trên cùng state. Chỉ dùng `force-unlock` khi chắc chắn không còn tiến trình Terraform nào đang sử dụng state.
 
-## 10. Thứ tự triển khai tiếp theo
-
-Thứ tự hợp lý để tiếp tục project:
-
-```text
-1. Siết Bastion SG và đưa admin CIDR thành variable
-2. Tạo ALB SG, Application SG và RDS SG bằng module security
-3. Tạo Bastion EC2 hoặc thay bằng Session Manager
-4. Tạo ALB target group và ALB
-5. Tạo Launch Template và Auto Scaling Group
-6. Tạo RDS DB subnet group
-7. Tạo RDS MySQL Multi-AZ
-8. Tạo ACM certificate
-9. Tạo Route 53 record trỏ tới ALB
-10. Bổ sung monitoring, logging và alarms
-```
-
-Nguyên tắc kết nối Security Group nên là:
-
-```text
-Internet --80/443--> ALB SG
-Admin /32 --22----> Bastion SG
-ALB SG --app port-> Application SG
-Bastion SG --22---> Application SG
-Application SG --3306--> RDS SG
-```
-
-Không dùng CIDR rộng khi có thể tham chiếu trực tiếp Security Group ID.
+NAT Gateway, ALB và public IPv4 phát sinh chi phí ngay cả khi traffic thấp. Khi kết thúc lab, chạy destroy và kiểm tra AWS Console để chắc chắn các tài nguyên tính phí đã được xóa.
