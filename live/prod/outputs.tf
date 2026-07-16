@@ -21,3 +21,16 @@ output "internet_gateway_id" {
 output "availability_zones" {
   value = module.vpc.availability_zones
 }
+
+output "bastion_instance_id" {
+  value = module.bastion_ec2.instance_id
+}
+
+output "bastion_public_ip" {
+  description = "Public IPv4 address, if assigned"
+  value       = module.bastion_ec2.public_ip
+}
+
+output "alb_dns_name" {
+  value = module.alb.dns_name
+}

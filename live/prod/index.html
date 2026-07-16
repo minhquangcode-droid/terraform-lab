@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#07111f">
+
+    <!-- Embedded favicon keeps the website self-contained in a single HTML file. -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%2307111f'/%3E%3Cpath d='M18 44h29a10 10 0 0 0 1-20 16 16 0 0 0-30-2 11 11 0 0 0 0 22Z' fill='%2300d4ff'/%3E%3Cpath d='m26 44 6-12 6 12Z' fill='%23fff'/%3E%3C/svg%3E">
+
+    <title>Cloud Engineer Portfolio</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            min-height: 100vh;
+            font-family: Arial, Helvetica, sans-serif;
+            color: white;
+            background:
+                radial-gradient(circle at top left, #1f4e78, transparent 40%),
+                radial-gradient(circle at bottom right, #6a11cb, transparent 40%),
+                linear-gradient(135deg, #07111f, #101b35, #1d1235);
+            overflow-x: hidden;
+            transition: background 0.4s ease, color 0.4s ease;
+        }
+
+        body.calm-mode {
+            background:
+                radial-gradient(circle at top right, #0f766e, transparent 36%),
+                radial-gradient(circle at bottom left, #1d4ed8, transparent 38%),
+                linear-gradient(135deg, #06151d, #0b2230, #111827);
+        }
+
+        .background-blur {
+            position: fixed;
+            width: 320px;
+            height: 320px;
+            border-radius: 50%;
+            filter: blur(90px);
+            opacity: 0.35;
+            z-index: -1;
+            animation: floating 8s ease-in-out infinite;
+        }
+
+        .blur-one {
+            top: -80px;
+            left: -80px;
+            background: #00d4ff;
+        }
+
+        .blur-two {
+            right: -100px;
+            bottom: -80px;
+            background: #9d4edd;
+            animation-delay: 2s;
+        }
+
+        nav {
+            width: 100%;
+            padding: 20px 8%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(7, 17, 31, 0.72);
+            backdrop-filter: blur(15px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        .logo span {
+            color: #00d4ff;
+        }
+
+        nav ul {
+            display: flex;
+            list-style: none;
+            gap: 28px;
+        }
+
+        nav a {
+            color: white;
+            text-decoration: none;
+            font-size: 15px;
+            transition: 0.3s;
+        }
+
+        nav a:hover {
+            color: #00d4ff;
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .live-pill,
+        .icon-button {
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.07);
+            color: white;
+            border-radius: 999px;
+        }
+
+        .live-pill {
+            padding: 9px 14px;
+            color: #b9f8ff;
+            font-family: "Courier New", monospace;
+            font-size: 13px;
+        }
+
+        .icon-button {
+            width: 40px;
+            height: 40px;
+            cursor: pointer;
+            font-size: 17px;
+            transition: 0.25s;
+        }
+
+        .icon-button:hover {
+            transform: rotate(12deg) scale(1.05);
+            border-color: rgba(0, 212, 255, 0.5);
+        }
+
+        .hero {
+            min-height: 88vh;
+            padding: 70px 8%;
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            align-items: center;
+            gap: 60px;
+        }
+
+        .hero-content {
+            animation: slideUp 1s ease;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 9px 16px;
+            margin-bottom: 24px;
+            border-radius: 50px;
+            font-size: 14px;
+            color: #8eeeff;
+            background: rgba(0, 212, 255, 0.12);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+        }
+
+        h1 {
+            font-size: clamp(42px, 6vw, 76px);
+            line-height: 1.1;
+            margin-bottom: 22px;
+        }
+
+        .gradient-text {
+            background: linear-gradient(90deg, #00d4ff, #9d7bff, #ff70a6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-content p {
+            max-width: 660px;
+            color: #bec7d8;
+            font-size: 18px;
+            line-height: 1.8;
+            margin-bottom: 32px;
+        }
+
+        .buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .hero-metrics {
+            margin-top: 34px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(100px, 1fr));
+            max-width: 600px;
+            gap: 12px;
+        }
+
+        .metric {
+            padding: 14px;
+            border-left: 2px solid #00d4ff;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 0 10px 10px 0;
+        }
+
+        .metric strong,
+        .metric span {
+            display: block;
+        }
+
+        .metric strong {
+            margin-bottom: 4px;
+            color: #eafcff;
+        }
+
+        .metric span {
+            color: #8390a8;
+            font-size: 12px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 14px 24px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+
+        .primary-button {
+            color: #07111f;
+            background: linear-gradient(90deg, #00d4ff, #70e1f5);
+            box-shadow: 0 10px 30px rgba(0, 212, 255, 0.25);
+        }
+
+        .secondary-button {
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .button:hover {
+            transform: translateY(-4px);
+        }
+
+        .server-card {
+            padding: 30px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.13);
+            backdrop-filter: blur(20px);
+            box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35);
+            animation: floating 5s ease-in-out infinite;
+        }
+
+        .window-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 24px;
+        }
+
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+
+        .red {
+            background: #ff5f56;
+        }
+
+        .yellow {
+            background: #ffbd2e;
+        }
+
+        .green {
+            background: #27c93f;
+        }
+
+        .terminal {
+            min-height: 300px;
+            padding: 24px;
+            border-radius: 14px;
+            background: #050a12;
+            color: #7fffd4;
+            font-family: "Courier New", monospace;
+            font-size: 15px;
+            line-height: 2;
+            box-shadow: inset 0 0 25px rgba(0, 0, 0, 0.5);
+        }
+
+        .terminal .command {
+            color: #00d4ff;
+        }
+
+        .terminal .success {
+            color: #52ff89;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 9px;
+            height: 18px;
+            vertical-align: middle;
+            background: #7fffd4;
+            animation: blink 0.8s infinite;
+        }
+
+        .section {
+            padding: 85px 8%;
+        }
+
+        .section-title {
+            margin-bottom: 45px;
+            text-align: center;
+        }
+
+        .section-title h2 {
+            margin-bottom: 12px;
+            font-size: 38px;
+        }
+
+        .section-title p {
+            color: #aeb9cc;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .card {
+            padding: 28px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: 0.35s;
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            background: rgba(255, 255, 255, 0.11);
+            border-color: rgba(0, 212, 255, 0.45);
+        }
+
+        .card-icon {
+            margin-bottom: 20px;
+            font-size: 38px;
+        }
+
+        .card h3 {
+            margin-bottom: 14px;
+            font-size: 22px;
+        }
+
+        .card p {
+            color: #b7c1d4;
+            line-height: 1.7;
+        }
+
+        .architecture {
+            max-width: 1180px;
+            margin: auto;
+            padding: 35px;
+            border-radius: 24px;
+            background: rgba(3, 10, 24, 0.62);
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            overflow: hidden;
+        }
+
+        .flow {
+            display: grid;
+            grid-template-columns: repeat(9, auto);
+            justify-content: center;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .flow-node {
+            min-width: 112px;
+            padding: 18px 14px;
+            text-align: center;
+            border-radius: 16px;
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.14), rgba(157, 123, 255, 0.1));
+            border: 1px solid rgba(0, 212, 255, 0.25);
+            transition: 0.3s;
+        }
+
+        .flow-node:hover {
+            transform: translateY(-5px) scale(1.03);
+            box-shadow: 0 12px 35px rgba(0, 212, 255, 0.14);
+        }
+
+        .flow-node span,
+        .flow-node strong {
+            display: block;
+        }
+
+        .flow-node span {
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+
+        .flow-node small {
+            color: #91a0b8;
+        }
+
+        .connector {
+            color: #00d4ff;
+            animation: pulseArrow 1.4s ease-in-out infinite;
+        }
+
+        .inspector-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .panel {
+            padding: 28px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .panel h3 {
+            margin-bottom: 20px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+            padding: 13px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .detail-row:last-child {
+            border-bottom: 0;
+        }
+
+        .detail-row span:first-child {
+            color: #8f9bb0;
+        }
+
+        .detail-row code {
+            color: #8eeeff;
+            text-align: right;
+            overflow-wrap: anywhere;
+        }
+
+        .copy-button {
+            width: 100%;
+            margin-top: 18px;
+            padding: 12px 16px;
+            color: #07111f;
+            font-weight: bold;
+            border: 0;
+            border-radius: 10px;
+            background: linear-gradient(90deg, #00d4ff, #70e1f5);
+            cursor: pointer;
+        }
+
+        .activity-item {
+            display: grid;
+            grid-template-columns: 12px 1fr auto;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .activity-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: #27c93f;
+            box-shadow: 0 0 10px #27c93f;
+        }
+
+        .activity-item small {
+            color: #8d98aa;
+        }
+
+        .toast {
+            position: fixed;
+            right: 24px;
+            bottom: 24px;
+            padding: 13px 18px;
+            border-radius: 12px;
+            color: #07111f;
+            background: #8eeeff;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.35);
+            transform: translateY(90px);
+            opacity: 0;
+            transition: 0.3s;
+            z-index: 200;
+        }
+
+        .toast.show {
+            transform: translateY(0);
+            opacity: 1;
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: opacity 0.65s ease, transform 0.65s ease;
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .status-section {
+            margin: 30px 8% 80px;
+            padding: 35px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 25px;
+            border-radius: 20px;
+            background: linear-gradient(
+                90deg,
+                rgba(0, 212, 255, 0.12),
+                rgba(157, 123, 255, 0.12)
+            );
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .status-title {
+            font-size: 26px;
+            margin-bottom: 8px;
+        }
+
+        .status-text {
+            color: #bac5d7;
+        }
+
+        .online-status {
+            min-width: 155px;
+            padding: 13px 22px;
+            text-align: center;
+            border-radius: 50px;
+            color: #9affb9;
+            background: rgba(39, 201, 63, 0.15);
+            border: 1px solid rgba(39, 201, 63, 0.4);
+            box-shadow: 0 0 25px rgba(39, 201, 63, 0.14);
+        }
+
+        .online-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            margin-right: 7px;
+            border-radius: 50%;
+            background: #27c93f;
+            box-shadow: 0 0 12px #27c93f;
+            animation: pulse 1.5s infinite;
+        }
+
+        footer {
+            padding: 30px;
+            text-align: center;
+            color: #8995aa;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        @keyframes floating {
+            0%, 100% {
+                transform: translateY(0);
+            }
+
+            50% {
+                transform: translateY(-15px);
+            }
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(35px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes blink {
+            50% {
+                opacity: 0;
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+
+            50% {
+                transform: scale(1.4);
+                opacity: 0.65;
+            }
+        }
+
+        @keyframes pulseArrow {
+            50% {
+                opacity: 0.35;
+                transform: translateX(3px);
+            }
+        }
+
+        @media (max-width: 900px) {
+            nav ul {
+                display: none;
+            }
+
+            .hero {
+                grid-template-columns: 1fr;
+                padding-top: 50px;
+            }
+
+            .cards {
+                grid-template-columns: 1fr;
+            }
+
+            .flow {
+                grid-template-columns: 1fr;
+            }
+
+            .connector {
+                transform: rotate(90deg);
+                text-align: center;
+            }
+
+            .inspector-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .status-section {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 560px) {
+            nav {
+                padding: 14px 5%;
+            }
+
+            .live-pill {
+                display: none;
+            }
+
+            .hero,
+            .section {
+                padding-left: 5%;
+                padding-right: 5%;
+            }
+
+            .hero-metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .architecture {
+                padding: 22px;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="background-blur blur-one"></div>
+    <div class="background-blur blur-two"></div>
+
+    <nav>
+        <div class="logo">Cloud<span>Lab</span></div>
+
+        <ul>
+            <li><a href="#home">Trang chủ</a></li>
+            <li><a href="#services">Công nghệ</a></li>
+            <li><a href="#architecture">Kiến trúc</a></li>
+            <li><a href="#status">Trạng thái</a></li>
+        </ul>
+
+        <div class="nav-actions">
+            <div class="live-pill" id="liveClock">--:--:--</div>
+            <button class="icon-button" id="themeToggle" aria-label="Đổi màu giao diện" title="Đổi màu giao diện">◐</button>
+        </div>
+    </nav>
+
+    <main>
+        <section class="hero" id="home">
+            <div class="hero-content">
+                <div class="badge">☁️ Website đang chạy trên AWS EC2</div>
+
+                <h1>
+                    Build.<br>
+                    Deploy.<br>
+                    <span class="gradient-text">Scale.</span>
+                </h1>
+
+                <p>
+                    Chào mừng bạn đến với website đầu tiên được triển khai
+                    trên máy chủ Amazon EC2. Trang web sử dụng Nginx,
+                    HTML và CSS, sẵn sàng để kết nối với ALB và Auto Scaling Group.
+                </p>
+
+                <div class="buttons">
+                    <a class="button primary-button" href="#services">
+                        Khám phá hệ thống
+                    </a>
+
+                    <a class="button secondary-button" href="#status">
+                        Kiểm tra server
+                    </a>
+                </div>
+
+                <div class="hero-metrics">
+                    <div class="metric">
+                        <strong>3 AZ</strong>
+                        <span>High availability</span>
+                    </div>
+                    <div class="metric">
+                        <strong>2–4 EC2</strong>
+                        <span>Auto Scaling</span>
+                    </div>
+                    <div class="metric">
+                        <strong>HTTP 200</strong>
+                        <span>Health check</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="server-card">
+                <div class="window-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                </div>
+
+                <div class="terminal">
+                    <div>
+                        <span class="command">$</span>
+                        systemctl status nginx
+                    </div>
+
+                    <div class="success">
+                        ● nginx.service active (running)
+                    </div>
+
+                    <br>
+
+                    <div>
+                        <span class="command">$</span>
+                        curl localhost
+                    </div>
+
+                    <div class="success">
+                        HTTP/1.1 200 OK
+                    </div>
+
+                    <br>
+
+                    <div>
+                        <span class="command">$</span>
+                        aws ec2 describe-instances
+                    </div>
+
+                    <div>
+                        Instance state: running
+                    </div>
+
+                    <div>
+                        Public service: available
+                    </div>
+
+                    <br>
+
+                    <div>
+                        <span class="command">$</span>
+                        deploy --production
+                        <span class="cursor"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section reveal" id="architecture">
+            <div class="section-title">
+                <h2>Luồng request trên AWS</h2>
+                <p>Một request đi qua nhiều lớp trước khi đến Nginx.</p>
+            </div>
+
+            <div class="architecture">
+                <div class="flow" aria-label="AWS request flow">
+                    <div class="flow-node"><span>🌍</span><strong>Internet</strong><small>Client request</small></div>
+                    <div class="connector">➜</div>
+                    <div class="flow-node"><span>⚖️</span><strong>ALB</strong><small>Public subnets</small></div>
+                    <div class="connector">➜</div>
+                    <div class="flow-node"><span>🖥️</span><strong>EC2 ASG</strong><small>Private subnets</small></div>
+                    <div class="connector">➜</div>
+                    <div class="flow-node"><span>⚡</span><strong>Nginx</strong><small>Port 80</small></div>
+                    <div class="connector">➜</div>
+                    <div class="flow-node"><span>✅</span><strong>Response</strong><small>HTML content</small></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="section reveal" id="inspector">
+            <div class="section-title">
+                <h2>Request Inspector</h2>
+                <p>Thông tin được tạo ngay trên trình duyệt, không gửi tới dịch vụ bên ngoài.</p>
+            </div>
+
+            <div class="inspector-grid">
+                <article class="panel">
+                    <h3>Thông tin phiên truy cập</h3>
+                    <div class="detail-row"><span>Request ID</span><code id="requestId">Đang tạo...</code></div>
+                    <div class="detail-row"><span>Múi giờ</span><code id="timezone">--</code></div>
+                    <div class="detail-row"><span>Trình duyệt</span><code id="browser">--</code></div>
+                    <div class="detail-row"><span>Thời gian tải</span><code id="loadTime">-- ms</code></div>
+                    <button class="copy-button" id="copyRequest">Sao chép Request ID</button>
+                </article>
+
+                <article class="panel">
+                    <h3>Live deployment activity</h3>
+                    <div class="activity-item"><span class="activity-dot"></span><span>Application Load Balancer</span><small>Healthy</small></div>
+                    <div class="activity-item"><span class="activity-dot"></span><span>Auto Scaling Group</span><small>In service</small></div>
+                    <div class="activity-item"><span class="activity-dot"></span><span>Nginx web server</span><small>Running</small></div>
+                    <div class="activity-item"><span class="activity-dot"></span><span>Phiên hiện tại</span><small id="uptime">00:00:00</small></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="section" id="services">
+            <div class="section-title">
+                <h2>Công nghệ sử dụng</h2>
+                <p>Một kiến trúc đơn giản nhưng có thể mở rộng.</p>
+            </div>
+
+            <div class="cards">
+                <article class="card">
+                    <div class="card-icon">☁️</div>
+
+                    <h3>Amazon EC2</h3>
+
+                    <p>
+                        Máy chủ ảo cung cấp tài nguyên tính toán để chạy
+                        website và các ứng dụng trên AWS.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <div class="card-icon">⚡</div>
+
+                    <h3>Nginx</h3>
+
+                    <p>
+                        Web server nhẹ, nhanh và phù hợp để phục vụ nội dung
+                        tĩnh hoặc làm reverse proxy cho backend.
+                    </p>
+                </article>
+
+                <article class="card">
+                    <div class="card-icon">📈</div>
+
+                    <h3>Auto Scaling</h3>
+
+                    <p>
+                        Hệ thống có thể tự động tăng hoặc giảm số lượng EC2
+                        dựa trên CPU, request hoặc các metric khác.
+                    </p>
+                </article>
+            </div>
+        </section>
+
+        <section class="status-section" id="status">
+            <div>
+                <h2 class="status-title">Hệ thống đang hoạt động ổn định</h2>
+
+                <p class="status-text">
+                    Nginx đang phục vụ website từ máy chủ AWS EC2.
+                </p>
+            </div>
+
+            <div class="online-status">
+                <span class="online-dot"></span>
+                Server Online
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        © 2026 CloudLab · Provisioned by Terraform · Served by Nginx
+    </footer>
+
+    <div class="toast" id="toast" role="status">Đã sao chép Request ID</div>
+
+    <script>
+        const clock = document.getElementById("liveClock");
+        const uptime = document.getElementById("uptime");
+        const requestId = document.getElementById("requestId");
+        const toast = document.getElementById("toast");
+        const startedAt = Date.now();
+
+        const makeRequestId = () => {
+            if (window.crypto && crypto.randomUUID) {
+                return crypto.randomUUID();
+            }
+
+            return `req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+        };
+
+        requestId.textContent = makeRequestId();
+        document.getElementById("timezone").textContent = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        document.getElementById("browser").textContent = navigator.userAgent.includes("Firefox")
+            ? "Firefox"
+            : navigator.userAgent.includes("Edg")
+                ? "Edge"
+                : navigator.userAgent.includes("Chrome")
+                    ? "Chrome"
+                    : navigator.userAgent.includes("Safari")
+                        ? "Safari"
+                        : "Unknown";
+
+        window.addEventListener("load", () => {
+            const timing = performance.getEntriesByType("navigation")[0];
+            const duration = timing ? Math.round(timing.duration) : Math.round(performance.now());
+            document.getElementById("loadTime").textContent = `${duration} ms`;
+        });
+
+        const updateLiveData = () => {
+            clock.textContent = new Intl.DateTimeFormat("vi-VN", {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            }).format(new Date());
+
+            const seconds = Math.floor((Date.now() - startedAt) / 1000);
+            const hours = String(Math.floor(seconds / 3600)).padStart(2, "0");
+            const minutes = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
+            const remaining = String(seconds % 60).padStart(2, "0");
+            uptime.textContent = `${hours}:${minutes}:${remaining}`;
+        };
+
+        updateLiveData();
+        setInterval(updateLiveData, 1000);
+
+        const themeToggle = document.getElementById("themeToggle");
+        if (localStorage.getItem("cloudlab-theme") === "calm") {
+            document.body.classList.add("calm-mode");
+        }
+
+        themeToggle.addEventListener("click", () => {
+            document.body.classList.toggle("calm-mode");
+            localStorage.setItem(
+                "cloudlab-theme",
+                document.body.classList.contains("calm-mode") ? "calm" : "default"
+            );
+        });
+
+        document.getElementById("copyRequest").addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(requestId.textContent);
+                toast.classList.add("show");
+                setTimeout(() => toast.classList.remove("show"), 1800);
+            } catch {
+                window.prompt("Sao chép Request ID:", requestId.textContent);
+            }
+        });
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry) => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add("visible");
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.12 });
+
+        document.querySelectorAll(".reveal").forEach((element) => observer.observe(element));
+    </script>
+</body>
+</html>
