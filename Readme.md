@@ -31,3 +31,5 @@ Lưu state ở local.# terraform-lab
 
 
 Đây là thay đổi từ PC
+
+Đây là tính năng mới
