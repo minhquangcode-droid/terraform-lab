@@ -29,3 +29,5 @@ Hardcode ID của resource.
 Viết toàn bộ code trong một file main.tf.
 Lưu state ở local.# terraform-lab
 
+
+Đây là thay đổi từ PC
