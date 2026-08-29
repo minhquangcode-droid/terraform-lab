@@ -37,6 +37,7 @@ module "bastion_ec2" {
 
   name                        = "bastion-host"
   ami_id                      = data.aws_ami.ubuntu.id
+  key_name                    = "terraform-lab"
   instance_type               = "t3.micro"
   subnet_id                   = module.vpc.public_subnet_ids[0]
   security_group_ids          = [module.bastion_sg.security_group_id]
@@ -121,6 +122,7 @@ module "application_asg" {
   name          = "application"
   ami_id        = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
+  key_name      = "terraform-lab"
   subnet_ids    = module.vpc.private_subnet_ids
 
   security_group_ids = [
