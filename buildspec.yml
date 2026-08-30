@@ -1,0 +1,44 @@
+version: 0.2
+
+# Buildspec tạm thời cho CodePipeline khi chưa có Manual Approval.
+# Luồng chạy: kiểm tra Terraform -> plan -> apply chính file plan vừa tạo.
+env:
+  variables:
+    TF_VERSION: "1.10.5"
+    TF_WORKING_DIR: "live/prod"
+    TF_IN_AUTOMATION: "true"
+
+phases:
+  install:
+    commands:
+      - |
+        set -euo pipefail
+        mkdir -p "$CODEBUILD_SRC_DIR/.terraform-bin"
+        curl --fail --silent --show-error --location \
+          "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip" \
+          --output /tmp/terraform.zip
+        unzip -o /tmp/terraform.zip -d "$CODEBUILD_SRC_DIR/.terraform-bin"
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" version
+
+  pre_build:
+    commands:
+      - |
+        set -euo pipefail
+        test -d "$CODEBUILD_SRC_DIR/$TF_WORKING_DIR"
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
+          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" init -input=false
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
+          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" fmt -check -recursive
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
+          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" validate
+
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
+          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" \
+          plan -input=false -no-color -out=tfplan
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
+          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" \
+          apply -input=false -auto-approve tfplan
