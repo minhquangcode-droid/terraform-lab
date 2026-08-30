@@ -1,8 +1,7 @@
 version: 0.2
 
-# Buildspec cho action TerraformPlan trong CodePipeline.
-# Output artifact gồm source Terraform, modules và tfplan để Apply dùng đúng
-# kế hoạch đã được phê duyệt.
+# Buildspec cho action TerraformApply trong CodePipeline.
+# Input artifact phải là output của TerraformPlan, bao gồm live/prod/tfplan.
 env:
   variables:
     TF_VERSION: "1.10.5"
@@ -26,12 +25,9 @@ phases:
       - |
         set -euo pipefail
         test -d "$CODEBUILD_SRC_DIR/$TF_WORKING_DIR"
+        test -f "$CODEBUILD_SRC_DIR/$TF_WORKING_DIR/tfplan"
         "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
           -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" init -input=false
-        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
-          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" fmt -check -recursive
-        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
-          -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" validate
 
   build:
     commands:
@@ -39,11 +35,4 @@ phases:
         set -euo pipefail
         "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" \
           -chdir="$CODEBUILD_SRC_DIR/$TF_WORKING_DIR" \
-          plan -input=false -no-color -out=tfplan
-
-artifacts:
-  base-directory: '.'
-  files:
-    - 'buildspec-apply.yml'
-    - 'live/prod/**/*'
-    - 'modules/**/*'
+          apply -input=false -auto-approve tfplan

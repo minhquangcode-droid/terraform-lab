@@ -810,6 +810,81 @@
                 animation-iteration-count: 1 !important;
             }
         }
+
+        /* Modern visual refresh: keeps the existing content and interactions. */
+        body {
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            background:
+                radial-gradient(circle at 8% 8%, rgba(0, 212, 255, 0.2), transparent 30rem),
+                radial-gradient(circle at 92% 12%, rgba(157, 78, 221, 0.22), transparent 28rem),
+                #07111f;
+        }
+
+        nav {
+            width: min(1180px, calc(100% - 32px));
+            margin: 16px auto 0;
+            padding: 14px 22px;
+            border: 1px solid rgba(255, 255, 255, 0.11);
+            border-radius: 18px;
+            background: rgba(9, 18, 36, 0.72);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+        }
+
+        .hero {
+            max-width: 1180px;
+            min-height: 76vh;
+            margin: 0 auto;
+            padding-left: 5%;
+            padding-right: 5%;
+        }
+
+        .badge,
+        .live-pill {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: rgba(0, 212, 255, 0.28);
+        }
+
+        .server-card,
+        .card,
+        .panel,
+        .architecture,
+        .status-section {
+            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(15, 28, 54, 0.58);
+            box-shadow: 0 18px 50px rgba(0, 0, 0, 0.2);
+        }
+
+        .card:hover {
+            transform: translateY(-7px);
+            border-color: rgba(0, 212, 255, 0.46);
+        }
+
+        .primary-button,
+        .copy-button {
+            background: linear-gradient(105deg, #3be9ff, #7c8cff 58%, #bf7bff);
+        }
+
+        .secondary-button {
+            backdrop-filter: blur(10px);
+        }
+
+        .flow-node {
+            background: linear-gradient(145deg, rgba(0, 212, 255, 0.16), rgba(124, 140, 255, 0.12));
+        }
+
+        .section-title h2 {
+            font-size: clamp(30px, 4vw, 42px);
+            letter-spacing: -0.04em;
+        }
+
+        @media (max-width: 560px) {
+            nav {
+                width: calc(100% - 20px);
+                margin-top: 10px;
+                padding: 12px 15px;
+                border-radius: 14px;
+            }
+        }
     </style>
 </head>
 
