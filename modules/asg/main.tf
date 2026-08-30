@@ -2,6 +2,7 @@ resource "aws_launch_template" "this" {
   name_prefix   = "${var.name}-"
   image_id      = var.ami_id
   instance_type = var.instance_type
+  key_name      = var.key_name
 
   update_default_version = true
 
