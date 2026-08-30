@@ -35,6 +35,13 @@ variable "target_group_arns" {
   default     = []
 }
 
+variable "key_name" {
+  description = "Optional EC2 key pair name"
+  type        = string
+  default     = null
+  nullable    = true
+}
+
 variable "iam_instance_profile_name" {
   description = "Optional IAM instance profile name"
   type        = string
