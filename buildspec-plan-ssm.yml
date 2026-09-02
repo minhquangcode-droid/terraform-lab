@@ -1,0 +1,82 @@
+version: 0.2
+
+# Repository, branch and Terraform directory are resolved from SSM at runtime.
+env:
+  variables:
+    SSM_PARAMETER_ARN: "arn:aws:ssm:us-east-1:768054002689:parameter/pipeline-repo"
+    GITHUB_OWNER: "minhquangcode-droid"
+    TF_VERSION: "1.10.5"
+    TF_IN_AUTOMATION: "true"
+  secrets-manager:
+    GITHUB_TOKEN: "arn:aws:secretsmanager:us-east-1:768054002689:secret:github-access-token-bp4GcR"
+
+phases:
+  install:
+    commands:
+      - |
+        set -euo pipefail
+        mkdir -p "$CODEBUILD_SRC_DIR/.terraform-bin"
+        curl --fail --silent --show-error --location \
+          "https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip" \
+          --output /tmp/terraform.zip
+        unzip -o /tmp/terraform.zip -d "$CODEBUILD_SRC_DIR/.terraform-bin"
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" version
+
+  pre_build:
+    commands:
+      - |
+        set -euo pipefail
+        PARAMETER_JSON="$(aws ssm get-parameter --name "$SSM_PARAMETER_ARN" --query 'Parameter.Value' --output text)"
+
+        read_parameter_field() {
+          python3 -c 'import json,sys; value=json.loads(sys.argv[1]).get(sys.argv[2]); assert isinstance(value, str) and value, "Missing or invalid field: " + sys.argv[2]; print(value)' "$PARAMETER_JSON" "$1"
+        }
+        REPO_NAME="$(read_parameter_field repo_name)"
+        BRANCH_NAME="$(read_parameter_field branch_name)"
+        ENV_PATH="$(read_parameter_field env_path)"
+
+        case "$REPO_NAME" in *[!a-zA-Z0-9._-]* | "") echo "Invalid repo_name" >&2; exit 1 ;; esac
+        case "$BRANCH_NAME" in *[!a-zA-Z0-9._/-]* | *..* | "") echo "Invalid branch_name" >&2; exit 1 ;; esac
+        case "$ENV_PATH" in /*) ;; *) echo "env_path must start with /" >&2; exit 1 ;; esac
+        case "$ENV_PATH" in *..*) echo "env_path must not contain .." >&2; exit 1 ;; esac
+
+        # The PAT is only supplied to Git through this temporary helper.
+        # It is not included in the clone URL or saved in Git configuration.
+        export GIT_TERMINAL_PROMPT=0
+        export GIT_ASKPASS="$CODEBUILD_SRC_DIR/.github-askpass"
+        cat > "$GIT_ASKPASS" <<'EOF'
+        #!/bin/sh
+        case "$1" in
+          *Username*) printf '%s\n' 'x-access-token' ;;
+          *) printf '%s\n' "$GITHUB_TOKEN" ;;
+        esac
+        EOF
+        chmod 700 "$GIT_ASKPASS"
+
+        SOURCE_DIR="$CODEBUILD_SRC_DIR/terraform-source"
+        REPO_URL="https://github.com/${GITHUB_OWNER}/${REPO_NAME}.git"
+        git clone --depth 1 --branch "$BRANCH_NAME" "$REPO_URL" "$SOURCE_DIR"
+        rm -f "$GIT_ASKPASS"
+
+        TF_DIR="$SOURCE_DIR$ENV_PATH"
+        test -d "$TF_DIR"
+        printf '{"repo_name":"%s","branch_name":"%s","env_path":"%s","terraform_version":"%s"}\n' \
+          "$REPO_NAME" "$BRANCH_NAME" "$ENV_PATH" "$TF_VERSION" > "$CODEBUILD_SRC_DIR/plan-metadata.json"
+
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" -chdir="$TF_DIR" init -input=false
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" -chdir="$TF_DIR" fmt -check -recursive
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" -chdir="$TF_DIR" validate
+
+  build:
+    commands:
+      - |
+        set -euo pipefail
+        TF_DIR="$CODEBUILD_SRC_DIR/terraform-source$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["env_path"])' "$CODEBUILD_SRC_DIR/plan-metadata.json")"
+        "$CODEBUILD_SRC_DIR/.terraform-bin/terraform" -chdir="$TF_DIR" plan -input=false -no-color -out=tfplan
+
+artifacts:
+  base-directory: '.'
+  files:
+    - 'plan-metadata.json'
+    - 'terraform-source/**/.terraform.lock.hcl'
+    - 'terraform-source/**/*'
